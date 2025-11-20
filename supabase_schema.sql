@@ -44,33 +44,6 @@ create table if not exists saved_articles (
   unique(user_email, article_id)
 );
 
--- Enable Row Level Security (RLS)
-alter table news_topics enable row level security;
-alter table news_articles enable row level security;
-alter table saved_articles enable row level security;
-
--- Create policies (simplified for now, allow public read)
-create policy "Public news topics are viewable by everyone"
-  on news_topics for select
-  using ( true );
-
-create policy "Public news articles are viewable by everyone"
-  on news_articles for select
-  using ( true );
-
-create policy "Users can view their own saved articles"
-  on saved_articles for select
-  using ( auth.uid()::text = user_email ); -- Note: simplified, usually map auth.uid() to a user table or use email directly if auth.email() is available
-
--- Allow authenticated users to insert saved articles
-create policy "Users can insert their own saved articles"
-  on saved_articles for insert
-  with check ( auth.jwt() ->> 'email' = user_email );
-
-create policy "Users can delete their own saved articles"
-  on saved_articles for delete
-  using ( auth.jwt() ->> 'email' = user_email );
-
 -- MPs Table
 create table if not exists mps (
   id uuid default uuid_generate_v4() primary key,
@@ -85,14 +58,6 @@ create table if not exists mps (
   openparliament_id text,
   openparliament_url text
 );
-
--- Enable RLS for MPs
-alter table mps enable row level security;
-
--- Allow public read access for MPs
-create policy "Public MPs are viewable by everyone"
-  on mps for select
-  using ( true );
 
 -- Bills Table
 create table if not exists bills (
@@ -110,14 +75,6 @@ create table if not exists bills (
   vote_summary jsonb default '{}'::jsonb
 );
 
--- Enable RLS for Bills
-alter table bills enable row level security;
-
--- Allow public read access for Bills
-create policy "Public bills are viewable by everyone"
-  on bills for select
-  using ( true );
-
 -- Tracked Bills Table
 create table if not exists tracked_bills (
   id uuid default uuid_generate_v4() primary key,
@@ -127,16 +84,45 @@ create table if not exists tracked_bills (
   unique(user_email, bill_id)
 );
 
+-- **NEW: News Sources Table for RSS Feeds**
+create table if not exists news_sources (
+  id bigint primary key generated always as identity,
+  name text not null,
+  rss_feed_url text not null,
+  bias_rating text,
+  is_active boolean default true,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Enable RLS
+alter table news_topics enable row level security;
+alter table news_articles enable row level security;
+alter table saved_articles enable row level security;
+alter table mps enable row level security;
+alter table bills enable row level security;
 alter table tracked_bills enable row level security;
+alter table news_sources enable row level security;
 
-create policy "Users can view their own tracked bills"
-  on tracked_bills for select
-  using ( auth.jwt() ->> 'email' = user_email );
+-- RLS Policies
+create policy "Public news topics are viewable by everyone" on news_topics for select using (true);
+create policy "Public news articles are viewable by everyone" on news_articles for select using (true);
+create policy "Public MPs are viewable by everyone" on mps for select using (true);
+create policy "Public bills are viewable by everyone" on bills for select using (true);
+create policy "Public read access" on news_sources for select using (true);
 
-create policy "Users can insert their own tracked bills"
-  on tracked_bills for insert
-  with check ( auth.jwt() ->> 'email' = user_email );
+create policy "Users can view their own saved articles" on saved_articles for select using (auth.jwt() ->> 'email' = user_email);
+create policy "Users can insert their own saved articles" on saved_articles for insert with check (auth.jwt() ->> 'email' = user_email);
+create policy "Users can delete their own saved articles" on saved_articles for delete using (auth.jwt() ->> 'email' = user_email);
 
-create policy "Users can delete their own tracked bills"
-  on tracked_bills for delete
-  using ( auth.jwt() ->> 'email' = user_email );
+create policy "Users can view their own tracked bills" on tracked_bills for select using (auth.jwt() ->> 'email' = user_email);
+create policy "Users can insert their own tracked bills" on tracked_bills for insert with check (auth.jwt() ->> 'email' = user_email);
+create policy "Users can delete their own tracked bills" on tracked_bills for delete using (auth.jwt() ->> 'email' = user_email);
+
+-- Seed Data for Canadian News Sources
+insert into news_sources (name, rss_feed_url, bias_rating) values
+('CBC News', 'https://www.cbc.ca/cmlink/rss-topstories', 'Left'),
+('CTV News', 'https://www.ctvnews.ca/rss/ctvnews-ca-top-stories-public-rss-1.822009', 'Center'),
+('Global News', 'https://globalnews.ca/feed/', 'Center'),
+('National Post', 'https://nationalpost.com/feed', 'Right'),
+('Toronto Star', 'https://www.thestar.com/search/?f=rss&t=article&c=news', 'Left')
+on conflict do nothing;

@@ -26,45 +26,16 @@ export const newsService = {
     },
 
     async fetchAndAnalyzeNews() {
-        // In a real app, this would call a Supabase Edge Function
-        // because scraping and LLM calls should happen server-side.
-        console.log("Fetching news from sources...");
+        console.log("Invoking fetch-rss-news Edge Function...");
 
-        // Simulation of the process
-        const sources = [
-            { name: "CBC", bias: "Left" },
-            { name: "Globe and Mail", bias: "Right" }
-        ];
+        const { data, error } = await supabase.functions.invoke('fetch-rss-news');
 
-        // For now, we'll just return success or mock creating a topic
-        // to show it "working" without the actual heavy backend logic.
-
-        // Check if we have recent topics
-        const { data: existing } = await supabase
-            .from('news_topics')
-            .select('*')
-            .limit(1);
-
-        if (!existing || existing.length === 0) {
-            // Create a dummy topic if none exist
-            await supabase.from('news_topics').insert({
-                topic: "Sample Political Topic",
-                headline: "Parliament Discusses New Bill",
-                ai_summary: mockLLMResponse.summary,
-                thumbnail_url: "https://images.unsplash.com/photo-1529101091760-6149d4c8df8c?auto=format&fit=crop&w=800&q=80",
-                published_date: new Date().toISOString(),
-                source_count_left: 2,
-                source_count_centre: 1,
-                source_count_right: 2,
-                left_emphasis: mockLLMResponse.left_emphasis,
-                right_emphasis: mockLLMResponse.right_emphasis,
-                common_ground: mockLLMResponse.common_ground,
-                key_points: mockLLMResponse.key_points,
-                tags: mockLLMResponse.tags,
-                is_featured: true
-            });
+        if (error) {
+            console.error("Error invoking function:", error);
+            throw error;
         }
 
-        return { success: true };
+        console.log("Edge function response:", data);
+        return data;
     }
 };
