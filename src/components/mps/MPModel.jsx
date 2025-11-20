@@ -1,0 +1,188 @@
+import React from 'react';
+import { supabase } from "@/lib/supabase";
+import { useQuery } from "@tanstack/react-query";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { MapPin, ExternalLink, Mail, Phone, Users, Vote } from "lucide-react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { format } from "date-fns";
+
+export default function MPModal({ mp, onClose }) {
+  const { data: votes = [] } = useQuery({
+    queryKey: ['mp-votes', mp.id],
+    queryFn: async () => {
+      // For now, since we don't have a votes table in the schema yet (it was just bills),
+      // we'll return empty array or mock data.
+      // Ideally this should be:
+      // const { data } = await supabase.from('votes').select('*').eq('mp_id', mp.id);
+      return [];
+    },
+    initialData: [],
+  });
+
+  const partyColors = {
+    Liberal: 'border-red-600 text-red-600 bg-red-50',
+    Conservative: 'border-blue-600 text-blue-600 bg-blue-50',
+    NDP: 'border-orange-600 text-orange-600 bg-orange-50',
+    'Bloc Québécois': 'border-blue-400 text-blue-400 bg-blue-50',
+    Green: 'border-green-600 text-green-600 bg-green-50',
+    Independent: 'border-gray-600 text-gray-600 bg-gray-50'
+  };
+
+  return (
+    <Dialog open={true} onOpenChange={onClose}>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <div className="flex items-start gap-4">
+            {mp.photo_url ? (
+              <img
+                src={mp.photo_url}
+                alt={mp.name}
+                className="w-20 h-20 rounded-full object-cover flex-shrink-0"
+                onError={(e) => {
+                  e.target.style.display = 'none';
+                  e.target.nextElementSibling.style.display = 'flex';
+                }}
+              />
+            ) : null}
+            <div
+              className="w-20 h-20 bg-gray-200 rounded-full flex items-center justify-center flex-shrink-0"
+              style={{ display: mp.photo_url ? 'none' : 'flex' }}
+            >
+              <Users className="w-10 h-10 text-gray-400" />
+            </div>
+            <div className="flex-1">
+              <DialogTitle className="text-3xl font-bold text-black mb-2">
+                {mp.name}
+              </DialogTitle>
+              <Badge
+                variant="outline"
+                className={`font-bold text-base ${partyColors[mp.party] || 'border-black text-black'}`}
+              >
+                {mp.party}
+              </Badge>
+            </div>
+          </div>
+        </DialogHeader>
+
+        <div className="space-y-6 mt-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <div className="flex items-start gap-2">
+                <MapPin className="w-5 h-5 text-gray-400 mt-0.5" />
+                <div>
+                  <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
+                    Riding
+                  </div>
+                  <div className="font-bold text-black">{mp.riding}</div>
+                  {mp.province && (
+                    <div className="text-sm text-gray-600">{mp.province}</div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {(mp.email || mp.phone) && (
+              <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
+                {mp.email && (
+                  <div className="flex items-center gap-2">
+                    <Mail className="w-4 h-4 text-gray-400" />
+                    <a href={`mailto:${mp.email}`} className="text-sm text-blue-600 hover:underline">
+                      {mp.email}
+                    </a>
+                  </div>
+                )}
+                {mp.phone && (
+                  <div className="flex items-center gap-2">
+                    <Phone className="w-4 h-4 text-gray-400" />
+                    <a href={`tel:${mp.phone}`} className="text-sm text-blue-600 hover:underline">
+                      {mp.phone}
+                    </a>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {mp.openparliament_url && (
+            <div>
+              <a
+                href={mp.openparliament_url}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Button variant="outline" size="sm" className="border-black">
+                  <ExternalLink className="w-4 h-4 mr-2" />
+                  View on OpenParliament
+                </Button>
+              </a>
+            </div>
+          )}
+
+          {votes.length > 0 ? (
+            <div>
+              <h3 className="text-lg font-bold text-black mb-3 flex items-center gap-2">
+                <Vote className="w-5 h-5" />
+                Recent Votes ({votes.length})
+              </h3>
+              <div className="border-2 border-gray-200 rounded-lg overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-gray-50">
+                      <TableHead className="font-bold">Bill</TableHead>
+                      <TableHead className="font-bold">Vote</TableHead>
+                      <TableHead className="font-bold">Date</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {votes.slice(0, 15).map((vote) => (
+                      <TableRow key={vote.id}>
+                        <TableCell className="font-medium">
+                          Bill (ID: {vote.bill_id})
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className={vote.vote_value === 'Yea' ? 'border-green-600 text-green-600' : 'border-red-600 text-red-600'}
+                          >
+                            {vote.vote_value}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {vote.vote_date && format(new Date(vote.vote_date), 'MMM d, yyyy')}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              {votes.length > 15 && (
+                <p className="text-sm text-gray-600 mt-2 text-center">
+                  Showing 15 of {votes.length} votes
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="text-center py-8 bg-gray-50 rounded-lg border border-gray-200">
+              <Vote className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+              <p className="text-gray-600">No voting record available yet</p>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}

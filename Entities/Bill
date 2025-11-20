@@ -1,0 +1,51 @@
+{
+  "name": "Bill",
+  "type": "object",
+  "properties": {
+    "bill_number": {
+      "type": "string",
+      "description": "Official bill number (e.g., C-10)"
+    },
+    "title": {
+      "type": "string",
+      "description": "Bill title"
+    },
+    "summary": {
+      "type": "string",
+      "description": "AI plain-language summary"
+    },
+    "why_it_matters": {
+      "type": "string",
+      "description": "Why this bill is important"
+    },
+    "status": {
+      "type": "string",
+      "description": "Current bill status"
+    },
+    "introduced_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date introduced"
+    },
+    "historical_context": {
+      "type": "string",
+      "description": "Historical and political context"
+    },
+    "party_positions": {
+      "type": "object",
+      "description": "Party stances on the bill"
+    },
+    "openparliament_url": {
+      "type": "string",
+      "description": "Link to OpenParliament"
+    },
+    "vote_summary": {
+      "type": "object",
+      "description": "Overall vote counts"
+    }
+  },
+  "required": [
+    "bill_number",
+    "title"
+  ]
+}

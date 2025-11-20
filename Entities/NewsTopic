@@ -1,0 +1,82 @@
+{
+  "name": "NewsTopic",
+  "type": "object",
+  "properties": {
+    "topic": {
+      "type": "string",
+      "description": "Main topic/story name"
+    },
+    "headline": {
+      "type": "string",
+      "description": "Main headline for this topic"
+    },
+    "ai_summary": {
+      "type": "string",
+      "description": "Neutral AI-generated summary across all sources"
+    },
+    "thumbnail_url": {
+      "type": "string",
+      "description": "Main image for the topic"
+    },
+    "published_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Latest publication date"
+    },
+    "source_count_left": {
+      "type": "integer",
+      "description": "Number of left-leaning sources"
+    },
+    "source_count_centre": {
+      "type": "integer",
+      "description": "Number of centre sources"
+    },
+    "source_count_right": {
+      "type": "integer",
+      "description": "Number of right-leaning sources"
+    },
+    "left_emphasis": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Points emphasized by left sources"
+    },
+    "right_emphasis": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Points emphasized by right sources"
+    },
+    "common_ground": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Points agreed upon across spectrum"
+    },
+    "key_points": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Key points Canadians should know"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Topic tags"
+    },
+    "is_featured": {
+      "type": "boolean",
+      "description": "Whether this is the main featured story"
+    }
+  },
+  "required": [
+    "topic",
+    "headline"
+  ]
+}

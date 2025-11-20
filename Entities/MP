@@ -1,0 +1,47 @@
+{
+  "name": "MP",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "MP full name"
+    },
+    "riding": {
+      "type": "string",
+      "description": "Electoral district"
+    },
+    "party": {
+      "type": "string",
+      "description": "Political party"
+    },
+    "province": {
+      "type": "string",
+      "description": "Province or territory"
+    },
+    "photo_url": {
+      "type": "string",
+      "description": "MP photo"
+    },
+    "email": {
+      "type": "string",
+      "description": "Contact email"
+    },
+    "phone": {
+      "type": "string",
+      "description": "Contact phone"
+    },
+    "openparliament_url": {
+      "type": "string",
+      "description": "OpenParliament profile URL"
+    },
+    "openparliament_id": {
+      "type": "string",
+      "description": "OpenParliament MP ID"
+    }
+  },
+  "required": [
+    "name",
+    "riding",
+    "party"
+  ]
+}

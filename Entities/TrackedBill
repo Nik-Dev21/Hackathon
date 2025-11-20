@@ -1,0 +1,18 @@
+{
+  "name": "TrackedBill",
+  "type": "object",
+  "properties": {
+    "bill_id": {
+      "type": "string",
+      "description": "Reference to Bill"
+    },
+    "user_email": {
+      "type": "string",
+      "description": "User tracking this bill"
+    }
+  },
+  "required": [
+    "bill_id",
+    "user_email"
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "name": "Vote",
+  "type": "object",
+  "properties": {
+    "bill_id": {
+      "type": "string",
+      "description": "Reference to Bill entity"
+    },
+    "mp_id": {
+      "type": "string",
+      "description": "Reference to MP entity"
+    },
+    "mp_name": {
+      "type": "string",
+      "description": "MP name for display"
+    },
+    "party": {
+      "type": "string",
+      "description": "Party affiliation"
+    },
+    "vote_value": {
+      "type": "string",
+      "enum": [
+        "Yea",
+        "Nay",
+        "Paired",
+        "Abstain"
+      ],
+      "description": "How the MP voted"
+    },
+    "vote_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date of vote"
+    }
+  },
+  "required": [
+    "bill_id",
+    "mp_id",
+    "vote_value"
+  ]
+}

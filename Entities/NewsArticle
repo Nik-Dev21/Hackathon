@@ -1,0 +1,53 @@
+{
+  "name": "NewsArticle",
+  "type": "object",
+  "properties": {
+    "topic": {
+      "type": "string",
+      "description": "Main topic/story this article belongs to"
+    },
+    "title": {
+      "type": "string",
+      "description": "Article headline"
+    },
+    "url": {
+      "type": "string",
+      "description": "Original article URL"
+    },
+    "source": {
+      "type": "string",
+      "description": "News source name"
+    },
+    "source_bias": {
+      "type": "string",
+      "enum": [
+        "Left",
+        "Centre",
+        "Right"
+      ],
+      "description": "Source's political lean"
+    },
+    "published_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Publication date"
+    },
+    "thumbnail_url": {
+      "type": "string",
+      "description": "Article thumbnail image"
+    },
+    "summary": {
+      "type": "string",
+      "description": "Article excerpt or summary"
+    },
+    "full_content": {
+      "type": "string",
+      "description": "Full article text"
+    }
+  },
+  "required": [
+    "topic",
+    "title",
+    "source"
+  ]
+}
