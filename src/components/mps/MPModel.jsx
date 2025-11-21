@@ -1,5 +1,4 @@
 import React from 'react';
-import { supabase } from "@/lib/supabase";
 import { useQuery } from "@tanstack/react-query";
 import {
   Dialog,
@@ -9,29 +8,31 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, ExternalLink, Mail, Phone, Users, Vote } from "lucide-react";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { format } from "date-fns";
+import { MapPin, ExternalLink, Mail, Phone, Users, Vote, MessageSquare, Activity } from "lucide-react";
+import { fetchMPVotes, fetchMPDebates } from "@/lib/api";
+import { formatDistanceToNow } from "date-fns";
 
 export default function MPModal({ mp, onClose }) {
-  const { data: votes = [] } = useQuery({
-    queryKey: ['mp-votes', mp.id],
-    queryFn: async () => {
-      // For now, since we don't have a votes table in the schema yet (it was just bills),
-      // we'll return empty array or mock data.
-      // Ideally this should be:
-      // const { data } = await supabase.from('votes').select('*').eq('mp_id', mp.id);
-      return [];
-    },
-    initialData: [],
+  const { data: votesData = {} } = useQuery({
+    queryKey: ['mp-votes', mp.url],
+    queryFn: () => fetchMPVotes(mp.url),
+    enabled: !!mp.url,
   });
+
+  const { data: debatesData = {} } = useQuery({
+    queryKey: ['mp-debates', mp.url],
+    queryFn: () => fetchMPDebates(mp.url),
+    enabled: !!mp.url,
+  });
+
+  const votes = votesData.objects || [];
+  const debates = debatesData.objects || [];
+
+  // Combine and sort activity
+  const activity = [
+    ...votes.map(v => ({ ...v, type: 'vote', dateObj: new Date(v.date) })),
+    ...debates.map(d => ({ ...d, type: 'debate', dateObj: new Date(d.date) }))
+  ].sort((a, b) => b.dateObj - a.dateObj);
 
   const partyColors = {
     Liberal: 'border-red-600 text-red-600 bg-red-50',
@@ -132,55 +133,55 @@ export default function MPModal({ mp, onClose }) {
             </div>
           )}
 
-          {votes.length > 0 ? (
-            <div>
-              <h3 className="text-lg font-bold text-black mb-3 flex items-center gap-2">
-                <Vote className="w-5 h-5" />
-                Recent Votes ({votes.length})
-              </h3>
-              <div className="border-2 border-gray-200 rounded-lg overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-gray-50">
-                      <TableHead className="font-bold">Bill</TableHead>
-                      <TableHead className="font-bold">Vote</TableHead>
-                      <TableHead className="font-bold">Date</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {votes.slice(0, 15).map((vote) => (
-                      <TableRow key={vote.id}>
-                        <TableCell className="font-medium">
-                          Bill (ID: {vote.bill_id})
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant="outline"
-                            className={vote.vote_value === 'Yea' ? 'border-green-600 text-green-600' : 'border-red-600 text-red-600'}
-                          >
-                            {vote.vote_value}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {vote.vote_date && format(new Date(vote.vote_date), 'MMM d, yyyy')}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-              {votes.length > 15 && (
-                <p className="text-sm text-gray-600 mt-2 text-center">
-                  Showing 15 of {votes.length} votes
-                </p>
+          {/* Activity Feed */}
+          <div>
+            <h3 className="text-lg font-bold text-black mb-4 flex items-center gap-2">
+              <Activity className="w-5 h-5" />
+              Activity in the House of Commons
+            </h3>
+
+            <div className="space-y-6 border-l-2 border-gray-100 pl-4 ml-2">
+              {activity.length > 0 ? (
+                activity.map((item, index) => (
+                  <div key={`${item.type}-${index}`} className="relative">
+                    <div className="absolute -left-[21px] top-1 w-3 h-3 rounded-full bg-gray-300 border-2 border-white" />
+
+                    <div className="mb-1 text-sm text-gray-500 font-medium">
+                      {formatDistanceToNow(item.dateObj, { addSuffix: true })}
+                    </div>
+
+                    {item.type === 'vote' ? (
+                      <div>
+                        <div className="font-medium text-black">
+                          Voted <span className={item.vote === 'Y' ? 'text-green-600 font-bold' : 'text-red-600 font-bold'}>
+                            {item.vote === 'Y' ? 'Yes' : 'No'}
+                          </span> on {item.bill_number ? `Bill ${item.bill_number}` : 'Motion'}
+                        </div>
+                        <div className="text-sm text-gray-600 mt-1">
+                          {item.description?.en}
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <div className="font-medium text-black flex items-center gap-2">
+                          <MessageSquare className="w-4 h-4 text-blue-500" />
+                          Spoke in the House
+                        </div>
+                        {item.most_frequent_word?.en && (
+                          <div className="text-sm text-gray-600 mt-1 italic">
+                            Context: "{item.most_frequent_word.en}"
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <p className="text-gray-500 italic">No recent activity found.</p>
               )}
             </div>
-          ) : (
-            <div className="text-center py-8 bg-gray-50 rounded-lg border border-gray-200">
-              <Vote className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-              <p className="text-gray-600">No voting record available yet</p>
-            </div>
-          )}
+          </div>
+
         </div>
       </DialogContent>
     </Dialog>

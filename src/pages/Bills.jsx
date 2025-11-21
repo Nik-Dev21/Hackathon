@@ -1,40 +1,43 @@
 import React, { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RefreshCw, Search, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import BillCard from "../components/bills/BillCard";
 import BillModal from "../components/bills/BillModel";
-import { billService } from "@/services/billService";
+import { fetchBills } from "@/lib/api";
 
 export default function Bills() {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedBill, setSelectedBill] = useState(null);
 
-  const { data: bills = [], isLoading } = useQuery({
+  const { data: billsData = {}, isLoading } = useQuery({
     queryKey: ['bills'],
-    queryFn: billService.getBills,
-    initialData: [],
+    queryFn: fetchBills,
   });
 
-  const fetchBillsMutation = useMutation({
-    mutationFn: billService.fetchAndAnalyzeBills,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['bills'] });
-      toast.success('Bills fetched and analyzed');
-    },
-    onError: (error) => {
-      toast.error('Error fetching bills: ' + error.message);
-    }
-  });
+  const bills = (billsData.objects || [])
+    .filter(bill => {
+      // Filter out pro forma bills (C-1 and S-1 are ceremonial bills with no content)
+      return bill.number !== 'C-1' && bill.number !== 'S-1';
+    })
+    .map(bill => ({
+      ...bill,
+      bill_number: bill.number,
+      title: bill.short_title?.en || bill.name?.en, // Prioritize short_title
+      introduced_date: bill.introduced,
+      openparliament_url: `https://openparliament.ca${bill.url}`,
+      status: `Session ${bill.session}`,
+      summary: bill.name?.en
+    }));
 
   const filteredBills = bills.filter(bill =>
     bill.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    bill.bill_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    bill.summary?.toLowerCase().includes(searchTerm.toLowerCase())
+    bill.bill_number?.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
 
   return (
     <div className="min-h-screen bg-white">
@@ -49,11 +52,11 @@ export default function Bills() {
             </p>
           </div>
           <Button
-            onClick={() => fetchBillsMutation.mutate()}
-            disabled={fetchBillsMutation.isPending}
+            onClick={() => queryClient.invalidateQueries({ queryKey: ['bills'] })}
+            disabled={isLoading}
             className="bg-black hover:bg-gray-800"
           >
-            {fetchBillsMutation.isPending ? (
+            {isLoading ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 Fetching...
@@ -91,7 +94,7 @@ export default function Bills() {
                 {searchTerm ? 'No bills match your search' : 'No bills yet'}
               </p>
               {!searchTerm && (
-                <Button onClick={() => fetchBillsMutation.mutate()} className="bg-black text-white">
+                <Button onClick={() => queryClient.invalidateQueries({ queryKey: ['bills'] })} className="bg-black text-white">
                   <RefreshCw className="w-4 h-4 mr-2" />
                   Fetch Bills
                 </Button>
@@ -100,7 +103,7 @@ export default function Bills() {
           ) : (
             filteredBills.map((bill) => (
               <BillCard
-                key={bill.id}
+                key={bill.url}
                 bill={bill}
                 onClick={() => setSelectedBill(bill)}
               />

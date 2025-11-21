@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { supabase } from "@/lib/supabase";
-import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
+import React from 'react';
+import { useQuery } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
@@ -9,231 +8,348 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Bookmark, ExternalLink, Users } from "lucide-react";
+import { ExternalLink, Calendar, FileText, Vote, Loader2, User, CheckCircle2, Scale } from "lucide-react";
 import { format } from "date-fns";
-import { toast } from "sonner";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { fetchBillDetails, fetchBillVotes, fetchVoteBallots, fetchMPs, fetchBillSummary } from "@/lib/api";
 
 export default function BillModal({ bill, onClose }) {
-  const queryClient = useQueryClient();
-  const [user, setUser] = useState(null);
-  const [isTracked, setIsTracked] = useState(false);
+  // Fetch detailed bill info
+  const { data: billDetails, isLoading: isLoadingDetails } = useQuery({
+    queryKey: ['bill-details', bill.url],
+    queryFn: () => fetchBillDetails(bill.url),
+    enabled: !!bill.url,
+  });
 
-  const { data: votes = [] } = useQuery({
-    queryKey: ['votes', bill.id],
+  // Fetch scraped debate summary if API summary is missing
+  const { data: scrapedSummary, isLoading: isLoadingSummary } = useQuery({
+    queryKey: ['bill-summary-scraped', bill.url],
     queryFn: async () => {
-      // Mock votes for now as we don't have a votes table populated
-      return [];
+      const html = await fetchBillSummary(bill.url);
+      if (!html) return null;
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, 'text/html');
+      // Find the Debate Summary header and get subsequent paragraphs
+      const headers = Array.from(doc.querySelectorAll('h2'));
+      const summaryHeader = headers.find(h => h.textContent.trim() === 'Debate Summary');
+
+      if (summaryHeader) {
+        let content = '';
+        let next = summaryHeader.nextElementSibling;
+        while (next && next.tagName !== 'H2' && next.tagName !== 'H3') {
+          content += next.outerHTML;
+          next = next.nextElementSibling;
+        }
+        return content;
+      }
+      return null;
     },
-    initialData: [],
+    enabled: !!bill.url && !billDetails?.summary?.en && !isLoadingDetails,
   });
 
-  useEffect(() => {
-    const loadUser = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      const currentUser = session?.user;
-      setUser(currentUser);
-
-      if (currentUser) {
-        const { data } = await supabase
-          .from('tracked_bills')
-          .select('*')
-          .eq('user_email', currentUser.email)
-          .eq('bill_id', bill.id);
-
-        setIsTracked(data && data.length > 0);
-      }
-    };
-    loadUser();
-  }, [bill.id]);
-
-  const toggleTrackMutation = useMutation({
-    mutationFn: async () => {
-      if (!user) return;
-
-      if (isTracked) {
-        const { error } = await supabase
-          .from('tracked_bills')
-          .delete()
-          .eq('user_email', user.email)
-          .eq('bill_id', bill.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('tracked_bills')
-          .insert({
-            user_email: user.email,
-            bill_id: bill.id
-          });
-        if (error) throw error;
-      }
-    },
-    onSuccess: () => {
-      setIsTracked(!isTracked);
-      queryClient.invalidateQueries({ queryKey: ['tracked-bills'] });
-      toast.success(isTracked ? 'Bill untracked' : 'Bill tracked');
-    },
-    onError: (error) => {
-      toast.error("Error updating tracked status");
-      console.error(error);
-    }
+  // Fetch bill votes
+  const { data: billVotesData, isLoading: isLoadingVotes } = useQuery({
+    queryKey: ['bill-votes', bill.number, bill.session],
+    queryFn: () => fetchBillVotes(bill.number, bill.session),
+    enabled: !!bill.number && !!bill.session,
   });
+
+  // Fetch MPs for party mapping
+  const { data: mpsData } = useQuery({
+    queryKey: ['mps'],
+    queryFn: fetchMPs,
+    staleTime: 1000 * 60 * 5, // Cache for 5 minutes
+  });
+
+  const votes = billVotesData?.objects || [];
+  const latestVote = votes[0];
+
+  // Fetch ballots for the latest vote to calculate party breakdown
+  const { data: ballotsData, isLoading: isLoadingBallots } = useQuery({
+    queryKey: ['vote-ballots', latestVote?.url],
+    queryFn: () => fetchVoteBallots(latestVote.url),
+    enabled: !!latestVote?.url,
+  });
+
+  const mps = mpsData?.objects || [];
+
+  // Create a map of MP URL to Party Name
+  const mpPartyMap = React.useMemo(() => {
+    const map = {};
+    mps.forEach(mp => {
+      if (mp.url && mp.current_party?.short_name?.en) {
+        map[mp.url] = mp.current_party.short_name.en;
+      }
+    });
+    return map;
+  }, [mps]);
+
+  // Calculate party votes dynamically from ballots
+  const partyVotes = React.useMemo(() => {
+    const ballots = ballotsData?.objects || [];
+    if (!ballots.length) return null;
+
+    const counts = {};
+
+    ballots.forEach(b => {
+      const party = mpPartyMap[b.politician_url] || 'Independent';
+      if (!counts[party]) counts[party] = { yes: 0, no: 0, paired: 0, party };
+
+      if (b.ballot === 'Yes' || b.ballot === 'Y') counts[party].yes++;
+      else if (b.ballot === 'No' || b.ballot === 'N') counts[party].no++;
+      else if (b.ballot === 'Paired') counts[party].paired++;
+    });
+
+    // Sort by total votes (Yes + No) descending
+    return Object.values(counts).sort((a, b) => (b.yes + b.no) - (a.yes + a.no));
+  }, [ballotsData, mpPartyMap]);
 
   const partyColors = {
-    Liberal: 'text-red-600',
-    Conservative: 'text-blue-600',
-    NDP: 'text-orange-600',
-    'Bloc Québécois': 'text-blue-400',
-    Green: 'text-green-600'
+    Liberal: 'bg-red-100 text-red-800 border-red-200',
+    Conservative: 'bg-blue-100 text-blue-800 border-blue-200',
+    NDP: 'bg-orange-100 text-orange-800 border-orange-200',
+    'Bloc Québécois': 'bg-blue-50 text-blue-600 border-blue-100',
+    Green: 'bg-green-100 text-green-800 border-green-200',
+    Independent: 'bg-gray-100 text-gray-800 border-gray-200'
   };
+
+  // Status badge color based on status code
+  const getStatusColor = (statusCode) => {
+    if (!statusCode) return 'bg-gray-100 text-gray-800';
+    if (statusCode.includes('RoyalAssent')) return 'bg-green-100 text-green-800';
+    if (statusCode.includes('Passed')) return 'bg-blue-100 text-blue-800';
+    if (statusCode.includes('Reading')) return 'bg-yellow-100 text-yellow-800';
+    return 'bg-gray-100 text-gray-800';
+  };
+
+  // Use API summary, scraped debate summary, or fallback to bill name
+  const summaryContent = billDetails?.summary?.en || scrapedSummary;
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0 gap-0">
+        <div className="p-6 border-b border-gray-100">
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1">
-              <div className="flex items-center gap-3 mb-3">
-                <Badge variant="outline" className="border-black text-black font-bold text-base">
+              <div className="flex items-center gap-3 mb-3 flex-wrap">
+                <Badge variant="outline" className="border-black text-black font-bold text-lg px-3 py-1">
                   {bill.bill_number}
                 </Badge>
-                {bill.status && (
-                  <span className="text-sm text-gray-600">{bill.status}</span>
+                {billDetails?.status_code && (
+                  <Badge className={getStatusColor(billDetails.status_code)}>
+                    {billDetails.status_code.replace(/([A-Z])/g, ' $1').trim()}
+                  </Badge>
                 )}
+                {billDetails?.law && (
+                  <Badge className="bg-green-600 text-white">
+                    <CheckCircle2 className="w-3 h-3 mr-1" />
+                    Law
+                  </Badge>
+                )}
+                <span className="text-gray-600 font-medium">Session {bill.session}</span>
               </div>
-              <DialogTitle className="text-3xl font-bold text-black mb-3 pr-8">
+              <DialogTitle className="text-2xl font-bold text-black leading-tight mb-2">
                 {bill.title}
               </DialogTitle>
-              {bill.introduced_date && (
-                <div className="text-sm text-gray-600">
-                  Introduced: {format(new Date(bill.introduced_date), 'MMM d, yyyy')}
-                </div>
+              {billDetails?.name?.en && billDetails.name.en !== bill.title && (
+                <p className="text-sm text-gray-600 italic">{billDetails.name.en}</p>
               )}
             </div>
-          </div>
-        </DialogHeader>
-
-        <div className="space-y-6 mt-4">
-          <div className="flex items-center gap-3">
-            {user && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => toggleTrackMutation.mutate()}
-                className={isTracked ? 'border-black bg-black text-white' : 'border-black'}
-              >
-                <Bookmark className="w-4 h-4 mr-2" />
-                {isTracked ? 'Tracking' : 'Track Bill'}
-              </Button>
-            )}
             {bill.openparliament_url && (
               <a
                 href={bill.openparliament_url}
                 target="_blank"
                 rel="noopener noreferrer"
+                className="flex-shrink-0"
               >
-                <Button variant="outline" size="sm" className="border-black">
+                <Button variant="outline" className="border-black hover:bg-gray-50">
                   <ExternalLink className="w-4 h-4 mr-2" />
                   OpenParliament
                 </Button>
               </a>
             )}
           </div>
+        </div>
 
-          <div>
-            <h3 className="text-lg font-bold text-black mb-3">What This Bill Does</h3>
-            <p className="text-gray-700 leading-relaxed">
-              {bill.summary}
-            </p>
-          </div>
-
-          {bill.why_it_matters && (
-            <div className="p-4 bg-gray-50 rounded-lg border-2 border-gray-200">
-              <h3 className="text-lg font-bold text-black mb-2">Why It Matters</h3>
-              <p className="text-gray-700 leading-relaxed">
-                {bill.why_it_matters}
-              </p>
-            </div>
-          )}
-
-          {bill.historical_context && (
-            <div>
-              <h3 className="text-lg font-bold text-black mb-3">Context</h3>
-              <p className="text-gray-700 leading-relaxed">
-                {bill.historical_context}
-              </p>
-            </div>
-          )}
-
-          {bill.party_positions && Object.keys(bill.party_positions).length > 0 && (
-            <div>
-              <h3 className="text-lg font-bold text-black mb-3">Party Positions</h3>
-              <div className="space-y-3">
-                {Object.entries(bill.party_positions).map(([party, position]) => (
-                  <div key={party} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                    <div className={`font-bold mb-1 ${partyColors[party] || 'text-black'}`}>
-                      {party}
-                    </div>
-                    <p className="text-sm text-gray-700">{position}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {votes.length > 0 && (
-            <div>
+        <div className="flex-1 p-6 overflow-y-auto">
+          <div className="space-y-8">
+            {/* Summary Section */}
+            <section>
               <h3 className="text-lg font-bold text-black mb-3 flex items-center gap-2">
-                <Users className="w-5 h-5" />
-                MP Votes ({votes.length})
+                <FileText className="w-5 h-5" />
+                Summary
               </h3>
-              <div className="border-2 border-gray-200 rounded-lg overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-gray-50">
-                      <TableHead className="font-bold">MP Name</TableHead>
-                      <TableHead className="font-bold">Party</TableHead>
-                      <TableHead className="font-bold">Vote</TableHead>
-                      <TableHead className="font-bold">Date</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {votes.slice(0, 20).map((vote) => (
-                      <TableRow key={vote.id}>
-                        <TableCell className="font-medium">{vote.mp_name}</TableCell>
-                        <TableCell className={partyColors[vote.party] || ''}>
-                          {vote.party}
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant="outline"
-                            className={vote.vote_value === 'Yea' ? 'border-green-600 text-green-600' : 'border-red-600 text-red-600'}
-                          >
-                            {vote.vote_value}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {vote.vote_date && format(new Date(vote.vote_date), 'MMM d, yyyy')}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-              {votes.length > 20 && (
-                <p className="text-sm text-gray-600 mt-2 text-center">
-                  Showing 20 of {votes.length} votes
-                </p>
+              {isLoadingDetails || (isLoadingSummary && !summaryContent) ? (
+                <div className="flex items-center gap-2 text-gray-500">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Loading summary...
+                </div>
+              ) : (
+                <div className="prose prose-sm max-w-none text-gray-700 bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  {summaryContent ? (
+                    <div dangerouslySetInnerHTML={{ __html: summaryContent }} />
+                  ) : (
+                    <p className="italic text-gray-500">
+                      No summary available for this bill.
+                    </p>
+                  )}
+                </div>
               )}
-            </div>
-          )}
+            </section>
+
+            {/* Sponsor Information */}
+            {billDetails?.sponsor_politician && (
+              <section>
+                <h3 className="text-lg font-bold text-black mb-3 flex items-center gap-2">
+                  <User className="w-5 h-5" />
+                  Sponsor
+                </h3>
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <div className="font-medium text-black">{billDetails.sponsor_politician.name}</div>
+                  {billDetails.sponsor_politician.current_party && (
+                    <div className="text-sm text-gray-600 mt-1">
+                      {billDetails.sponsor_politician.current_party.short_name} • {billDetails.sponsor_politician.riding_name}
+                    </div>
+                  )}
+                </div>
+              </section>
+            )}
+
+            {/* Voting History Section */}
+            <section>
+              <h3 className="text-lg font-bold text-black mb-3 flex items-center gap-2">
+                <Vote className="w-5 h-5" />
+                Voting Record
+              </h3>
+
+              {isLoadingVotes ? (
+                <div className="flex items-center gap-2 text-gray-500">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Loading voting history...
+                </div>
+              ) : latestVote ? (
+                <div className="space-y-4">
+                  <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                    <div className="flex items-center justify-between mb-4 border-b border-gray-100 pb-3">
+                      <div>
+                        <div className="font-bold text-lg mb-1">
+                          {latestVote.result}
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          {format(new Date(latestVote.date), 'MMMM d, yyyy')}
+                        </div>
+                      </div>
+                      <Badge
+                        className={latestVote.result === 'Passed' ? 'bg-green-600' : 'bg-gray-600'}
+                      >
+                        {latestVote.result}
+                      </Badge>
+                    </div>
+
+                    <div className="text-sm text-gray-700 mb-4">
+                      {latestVote.description?.en}
+                    </div>
+
+                    {isLoadingBallots ? (
+                      <div className="flex items-center gap-2 text-gray-500 py-4">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Loading party breakdown...
+                      </div>
+                    ) : partyVotes ? (
+                      <>
+                        <h4 className="font-bold text-sm mb-3">Party Positions</h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {partyVotes.map((pv, index) => (
+                            <div key={index} className={`p-3 rounded-md border ${partyColors[pv.party] || 'bg-gray-50 border-gray-200'}`}>
+                              <div className="font-bold mb-1">{pv.party}</div>
+                              <div className="flex gap-3 text-sm">
+                                {pv.yes > 0 && <span className="font-medium text-green-700">Yea: {pv.yes}</span>}
+                                {pv.no > 0 && <span className="font-medium text-red-700">Nay: {pv.no}</span>}
+                                {pv.paired > 0 && <span className="text-gray-600">Paired: {pv.paired}</span>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-sm text-gray-500 italic">
+                        No party breakdown available for this vote.
+                      </p>
+                    )}
+                  </div>
+
+                  {votes.length > 1 && (
+                    <p className="text-sm text-gray-500 text-center">
+                      Showing most recent vote. {votes.length - 1} other vote{votes.length > 2 ? 's' : ''} recorded.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-8 bg-gray-50 rounded-lg border border-gray-200">
+                  <Vote className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                  <p className="text-gray-600">No voting records found for this bill</p>
+                  <p className="text-sm text-gray-500 mt-1">This bill may not have been voted on yet</p>
+                </div>
+              )}
+            </section>
+
+            {/* Bill Text Links */}
+            {(billDetails?.text_docx_url || billDetails?.links?.text) && (
+              <section>
+                <h3 className="text-lg font-bold text-black mb-3 flex items-center gap-2">
+                  <Scale className="w-5 h-5" />
+                  Bill Text
+                </h3>
+                <div className="flex gap-3">
+                  {billDetails.text_docx_url && (
+                    <a href={billDetails.text_docx_url} target="_blank" rel="noopener noreferrer">
+                      <Button variant="outline" size="sm">
+                        <FileText className="w-4 h-4 mr-2" />
+                        Download DOCX
+                      </Button>
+                    </a>
+                  )}
+                  {billDetails.text_pdf_url && (
+                    <a href={billDetails.text_pdf_url} target="_blank" rel="noopener noreferrer">
+                      <Button variant="outline" size="sm">
+                        <FileText className="w-4 h-4 mr-2" />
+                        Download PDF
+                      </Button>
+                    </a>
+                  )}
+                  {billDetails.links?.text && (
+                    <a href={billDetails.links.text} target="_blank" rel="noopener noreferrer">
+                      <Button variant="outline" size="sm">
+                        <FileText className="w-4 h-4 mr-2" />
+                        View Full Text
+                      </Button>
+                    </a>
+                  )}
+                </div>
+              </section>
+            )}
+
+            {/* Additional Info */}
+            <section className="grid grid-cols-2 gap-4">
+              <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <div className="flex items-center gap-2 mb-1 text-gray-500">
+                  <Calendar className="w-4 h-4" />
+                  <span className="text-xs font-bold uppercase tracking-wider">Introduced</span>
+                </div>
+                <div className="font-medium">
+                  {bill.introduced_date ? format(new Date(bill.introduced_date), 'MMMM d, yyyy') : 'Unknown'}
+                </div>
+              </div>
+              <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <div className="flex items-center gap-2 mb-1 text-gray-500">
+                  <FileText className="w-4 h-4" />
+                  <span className="text-xs font-bold uppercase tracking-wider">Type</span>
+                </div>
+                <div className="font-medium">
+                  {bill.bill_number?.startsWith('C-') ? 'Government Bill' : bill.bill_number?.startsWith('S-') ? 'Senate Bill' : 'Private Member Bill'}
+                </div>
+              </div>
+            </section>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

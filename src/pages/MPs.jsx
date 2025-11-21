@@ -1,12 +1,12 @@
 import React, { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RefreshCw, Search, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import MPCard from "../components/mps/MPCard";
 import MPModal from "../components/mps/MPModel";
-import { mpService } from "@/services/mpService";
+import { fetchMPs } from "@/lib/api";
 
 export default function MPs() {
   const queryClient = useQueryClient();
@@ -14,22 +14,18 @@ export default function MPs() {
   const [selectedMP, setSelectedMP] = useState(null);
   const [partyFilter, setPartyFilter] = useState("all");
 
-  const { data: mps = [], isLoading } = useQuery({
+  const { data: mpsData = {}, isLoading } = useQuery({
     queryKey: ['mps'],
-    queryFn: mpService.getMPs,
-    initialData: [],
+    queryFn: fetchMPs,
   });
 
-  const fetchMPsMutation = useMutation({
-    mutationFn: mpService.fetchAndUpdateMPs,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['mps'] });
-      toast.success('MPs data fetched');
-    },
-    onError: (error) => {
-      toast.error('Error fetching MPs: ' + error.message);
-    }
-  });
+  const mps = (mpsData.objects || []).map(mp => ({
+    ...mp,
+    photo_url: mp.image ? `https://api.openparliament.ca${mp.image}` : null,
+    party: mp.current_party?.short_name?.en,
+    riding: mp.current_riding?.name?.en,
+    province: mp.current_riding?.province,
+  }));
 
   const parties = [...new Set(mps.map(mp => mp.party).filter(Boolean))].sort();
 
@@ -58,11 +54,11 @@ export default function MPs() {
             </p>
           </div>
           <Button
-            onClick={() => fetchMPsMutation.mutate()}
-            disabled={fetchMPsMutation.isPending}
+            onClick={() => queryClient.invalidateQueries({ queryKey: ['mps'] })}
+            disabled={isLoading}
             className="bg-black hover:bg-gray-800"
           >
-            {fetchMPsMutation.isPending ? (
+            {isLoading ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 Fetching...
@@ -123,7 +119,7 @@ export default function MPs() {
                 {searchTerm ? 'No MPs match your search' : 'No MPs data yet'}
               </p>
               {!searchTerm && (
-                <Button onClick={() => fetchMPsMutation.mutate()} className="bg-black text-white">
+                <Button onClick={() => queryClient.invalidateQueries({ queryKey: ['mps'] })} className="bg-black text-white">
                   <RefreshCw className="w-4 h-4 mr-2" />
                   Fetch MPs
                 </Button>
@@ -132,7 +128,7 @@ export default function MPs() {
           ) : (
             filteredMPs.map((mp) => (
               <MPCard
-                key={mp.id}
+                key={mp.url}
                 mp={mp}
                 onClick={() => setSelectedMP(mp)}
               />
