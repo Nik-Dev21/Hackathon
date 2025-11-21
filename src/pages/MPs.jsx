@@ -39,7 +39,7 @@ export default function MPs() {
     const matchesParty = partyFilter === "all" || mp.party === partyFilter;
 
     return matchesSearch && matchesParty;
-  });
+  }).sort((a, b) => a.name.localeCompare(b.name));
 
   return (
     <div className="min-h-screen bg-white">

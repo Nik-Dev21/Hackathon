@@ -121,8 +121,8 @@ export default function BillModal({ bill, onClose }) {
     return 'bg-gray-100 text-gray-800';
   };
 
-  // Use API summary, scraped debate summary, or fallback to bill name
-  const summaryContent = billDetails?.summary?.en || scrapedSummary;
+  // Use API summary, scraped debate summary, or fallback to bill name/AI summary
+  const summaryContent = billDetails?.summary?.en || scrapedSummary || bill.summary;
 
   return (
     <Dialog open={true} onOpenChange={onClose}>

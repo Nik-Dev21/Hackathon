@@ -72,35 +72,30 @@ export default function Layout({ children }) {
           background-color: rgb(156, 163, 175);
         }
       `}</style>
-      
+
       <nav className="bg-white border-b-2 border-black sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6">
           <div className="flex items-center justify-between h-16">
             <Link to={createPageUrl("News")} className="flex items-center gap-3">
-              <img 
-                src="https://raw.githubusercontent.com/user-attachments/assets/parliament-watch-logo.png" 
-                alt="Parliament Watch"
-                className="h-10 w-auto"
-                onError={(e) => {
-                  e.target.style.display = 'none';
-                  e.target.nextSibling.style.display = 'block';
-                }}
-              />
-              <div style={{ display: 'none' }} className="text-xl font-bold tracking-tight text-black">
+              <div className="text-xl font-bold tracking-tight text-black">
                 PARLIAMENT WATCH
               </div>
+              <img
+                src="/parliament-logo.png"
+                alt="Parliament Watch"
+                className="h-10 w-auto"
+              />
             </Link>
-            
+
             <div className="flex items-center gap-8">
               {navigationItems.map((item) => (
                 <Link
                   key={item.title}
                   to={item.url}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-md font-semibold text-sm tracking-wide transition-colors ${
-                    location.pathname === item.url
+                  className={`flex items-center gap-2 px-3 py-2 rounded-md font-semibold text-sm tracking-wide transition-colors ${location.pathname === item.url
                       ? 'bg-black text-white'
                       : 'text-black hover:bg-gray-100'
-                  }`}
+                    }`}
                 >
                   <item.icon className="w-4 h-4" />
                   {item.title}

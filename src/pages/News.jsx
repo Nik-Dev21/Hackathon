@@ -43,13 +43,6 @@ export default function News() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="bg-white border-b">
-        <div className="max-w-7xl mx-auto px-6 py-6">
-          <h1 className="text-3xl font-bold text-black tracking-tight">Canadian Politics & News</h1>
-          <p className="text-gray-500 mt-2">Latest coverage from across the political spectrum</p>
-        </div>
-      </div>
-
       {isLoading ? (
         <div className="max-w-7xl mx-auto px-6 py-12 text-center">
           <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
