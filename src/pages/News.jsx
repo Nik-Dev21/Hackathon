@@ -1,8 +1,7 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Loader2, Search } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { RefreshCw, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -12,7 +11,6 @@ import { newsService } from "@/services/newsService";
 export default function News() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const [searchTerm, setSearchTerm] = useState("");
 
   const { data: topics = [], isLoading } = useQuery({
     queryKey: ['news-topics'],
@@ -31,15 +29,12 @@ export default function News() {
     }
   });
 
-  const filteredTopics = topics.filter(topic =>
-    topic.headline?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    topic.topic?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    topic.tags?.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  // Filter out topics that might be invalid or empty if needed
+  const validTopics = topics.filter(t => t.headline && t.topic);
 
-  const featuredTopic = filteredTopics.find(t => t.is_featured) || filteredTopics[0];
-  const sideTopics = filteredTopics.filter(t => t.id !== featuredTopic?.id).slice(0, 4);
-  const remainingTopics = filteredTopics.filter(t => t.id !== featuredTopic?.id).slice(4);
+  const featuredTopic = validTopics.find(t => t.is_featured) || validTopics[0];
+  const sideTopics = validTopics.filter(t => t.id !== featuredTopic?.id).slice(0, 4);
+  const remainingTopics = validTopics.filter(t => t.id !== featuredTopic?.id).slice(4);
 
   const totalSources = (featuredTopic?.source_count_left || 0) + (featuredTopic?.source_count_centre || 0) + (featuredTopic?.source_count_right || 0);
   const leftPercent = totalSources > 0 ? Math.round(((featuredTopic?.source_count_left || 0) / totalSources) * 100) : 0;
@@ -49,35 +44,9 @@ export default function News() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="bg-white border-b">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <Input
-              placeholder="Search topics..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9 border-gray-300 text-sm"
-            />
-          </div>
-          <Button
-            onClick={() => fetchNewsMutation.mutate()}
-            disabled={fetchNewsMutation.isPending}
-            size="sm"
-            variant="outline"
-            className="border-gray-300"
-          >
-            {fetchNewsMutation.isPending ? (
-              <>
-                <Loader2 className="w-3 h-3 mr-2 animate-spin" />
-                Updating...
-              </>
-            ) : (
-              <>
-                <RefreshCw className="w-3 h-3 mr-2" />
-                Refresh
-              </>
-            )}
-          </Button>
+        <div className="max-w-7xl mx-auto px-6 py-6">
+          <h1 className="text-3xl font-bold text-black tracking-tight">Canadian Politics & News</h1>
+          <p className="text-gray-500 mt-2">Latest coverage from across the political spectrum</p>
         </div>
       </div>
 
@@ -86,18 +55,12 @@ export default function News() {
           <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
           <p className="text-gray-600">Loading news...</p>
         </div>
-      ) : filteredTopics.length === 0 ? (
+      ) : validTopics.length === 0 ? (
         <div className="max-w-7xl mx-auto px-6 py-12 text-center">
           <div className="border-2 border-dashed border-gray-300 rounded-lg p-12">
             <p className="text-gray-600 mb-4">
-              {searchTerm ? 'No topics match your search' : 'No news topics yet'}
+              No news topics yet
             </p>
-            {!searchTerm && (
-              <Button onClick={() => fetchNewsMutation.mutate()} className="bg-black text-white">
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Fetch Latest News
-              </Button>
-            )}
           </div>
         </div>
       ) : (
@@ -105,15 +68,15 @@ export default function News() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
             <div className="lg:col-span-2">
               <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4">
-                Daily Briefing
+                Top Story
               </div>
               {featuredTopic && (
                 <div
-                  className="bg-white rounded-lg overflow-hidden shadow-sm border border-gray-200 cursor-pointer hover:shadow-md transition-shadow"
+                  className="bg-white rounded-lg overflow-hidden shadow-sm border border-gray-200 cursor-pointer hover:shadow-md transition-shadow h-full flex flex-col"
                   onClick={() => navigate(createPageUrl("Article") + "?id=" + featuredTopic.id)}
                 >
                   {featuredTopic.thumbnail_url && (
-                    <div className="h-80 bg-gray-100 overflow-hidden">
+                    <div className="h-80 bg-gray-100 overflow-hidden shrink-0">
                       <img
                         src={featuredTopic.thumbnail_url}
                         alt={featuredTopic.headline}
@@ -121,18 +84,17 @@ export default function News() {
                       />
                     </div>
                   )}
-                  <div className="p-6">
+                  <div className="p-6 flex flex-col flex-1">
                     <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
                       {featuredTopic.tags?.[0] || 'Politics'}
                     </div>
                     <h2 className="text-3xl font-bold text-black mb-4 leading-tight">
                       {featuredTopic.headline}
                     </h2>
-                    <p className="text-gray-700 mb-4 leading-relaxed">
+                    <p className="text-gray-700 mb-4 leading-relaxed line-clamp-2 flex-1">
                       {featuredTopic.ai_summary}
                     </p>
-
-                    <div className="border-t pt-4">
+                    <div className="mt-auto pt-4 border-t">
                       <div className="flex items-center justify-between text-xs text-gray-600 mb-2">
                         <span className="font-semibold">Source Bias Distribution</span>
                         <span>{totalSources} sources • {featuredTopic.key_points?.length || 0} views</span>
@@ -168,6 +130,10 @@ export default function News() {
               <div className="space-y-4">
                 {sideTopics.map(topic => {
                   const total = (topic.source_count_left || 0) + (topic.source_count_centre || 0) + (topic.source_count_right || 0);
+                  const lPercent = total > 0 ? Math.round(((topic.source_count_left || 0) / total) * 100) : 0;
+                  const cPercent = total > 0 ? Math.round(((topic.source_count_centre || 0) / total) * 100) : 0;
+                  const rPercent = total > 0 ? Math.round(((topic.source_count_right || 0) / total) * 100) : 0;
+
                   return (
                     <div
                       key={topic.id}
@@ -191,9 +157,24 @@ export default function News() {
                           </h3>
                         </div>
                       </div>
-                      <div className="flex items-center justify-between text-xs text-gray-500">
-                        <span>{topic.published_date ? format(new Date(topic.published_date), 'MMM d') : ''}</span>
-                        <span>{total} sources • {topic.key_points?.length || 0}</span>
+
+                      {/* Source Distribution Bar for Side Articles */}
+                      <div className="mt-2">
+                        <div className="flex h-1.5 bg-gray-100 rounded-full overflow-hidden w-full mb-1">
+                          {lPercent > 0 && (
+                            <div className="h-full bg-blue-500" style={{ width: `${lPercent}%` }} />
+                          )}
+                          {cPercent > 0 && (
+                            <div className="h-full bg-gray-400" style={{ width: `${cPercent}%` }} />
+                          )}
+                          {rPercent > 0 && (
+                            <div className="h-full bg-red-500" style={{ width: `${rPercent}%` }} />
+                          )}
+                        </div>
+                        <div className="flex items-center justify-between text-[10px] text-gray-500">
+                          <span>{total} sources</span>
+                          <span>{topic.published_date ? format(new Date(topic.published_date), 'MMM d') : ''}</span>
+                        </div>
                       </div>
                     </div>
                   );
@@ -202,7 +183,7 @@ export default function News() {
             </div>
           </div>
 
-          {remainingTopics.length > 0 && (
+          {remainingTopics.slice(0, 9).length > 0 && (
             <div>
               <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4">
                 Top News Stories
@@ -211,7 +192,7 @@ export default function News() {
                 Latest developments across multiple perspectives
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {remainingTopics.map(topic => (
+                {remainingTopics.slice(0, 9).map(topic => (
                   <div
                     key={topic.id}
                     className="bg-white rounded-lg overflow-hidden shadow-sm border border-gray-200 cursor-pointer hover:shadow-md transition-shadow"

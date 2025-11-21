@@ -19,7 +19,8 @@ export const newsService = {
         const { data, error } = await supabase
             .from('news_topics')
             .select('*')
-            .order('created_at', { ascending: false });
+            .order('created_at', { ascending: false })
+            .limit(20);
 
         if (error) throw error;
         return data;
