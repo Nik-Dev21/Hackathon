@@ -9,6 +9,14 @@ export const fetchBills = async () => {
     return response.json();
 };
 
+export const fetchPassedBills = async () => {
+    const response = await fetch(`${BASE_URL}/bills/?session=45-1&format=json&limit=100&status_code=RoyalAssentGiven`);
+    if (!response.ok) {
+        throw new Error("Failed to fetch passed bills");
+    }
+    return response.json();
+};
+
 export async function fetchMPs() {
     const response = await fetch(`${BASE_URL}/politicians/?format=json&limit=500`);
     if (!response.ok) {

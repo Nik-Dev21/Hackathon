@@ -7,7 +7,6 @@ import News from "./pages/News";
 import Bills from "./pages/Bills";
 import MPs from "./pages/MPs";
 import Chatbot from "./pages/Chatbot";
-import Article from "./pages/Article";
 
 const queryClient = new QueryClient();
 
@@ -22,7 +21,7 @@ function App() {
                         <Route path="/bills" element={<Bills />} />
                         <Route path="/mps" element={<MPs />} />
                         <Route path="/chatbot" element={<Chatbot />} />
-                        <Route path="/article" element={<Article />} />
+                        <Route path="*" element={<Navigate to="/news" replace />} />
                     </Routes>
                 </Layout>
             </Router>

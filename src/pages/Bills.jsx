@@ -6,7 +6,7 @@ import { RefreshCw, Search, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import BillCard from "../components/bills/BillCard";
 import BillModal from "../components/bills/BillModel";
-import { fetchBills } from "@/lib/api";
+import { fetchBills, fetchPassedBills } from "@/lib/api";
 import billSummaries from "@/data/bill_summaries.json";
 
 export default function Bills() {
@@ -15,26 +15,46 @@ export default function Bills() {
     const [selectedBill, setSelectedBill] = useState(null);
     const [statusFilter, setStatusFilter] = useState("all");
 
-    const { data: billsData = {}, isLoading } = useQuery({
+    const { data: billsData = {}, isLoading: isLoadingBills } = useQuery({
         queryKey: ['bills'],
         queryFn: fetchBills,
     });
+
+    const { data: passedBillsData = {}, isLoading: isLoadingPassed } = useQuery({
+        queryKey: ['passedBills'],
+        queryFn: fetchPassedBills,
+    });
+
+    const isLoading = isLoadingBills || isLoadingPassed;
+
+    const passedBillNumbers = new Set((passedBillsData.objects || []).map(b => b.number));
 
     const bills = (billsData.objects || [])
         .filter(bill => {
             // Filter out pro forma bills (C-1 and S-1 are ceremonial bills with no content)
             return bill.number !== 'C-1' && bill.number !== 'S-1';
         })
-        .map(bill => ({
-            ...bill,
-            bill_number: bill.number,
-            title: bill.short_title?.en || bill.name?.en, // Prioritize short_title
-            introduced_date: bill.introduced,
-            openparliament_url: `https://openparliament.ca${bill.url}`,
-            status: `Session ${bill.session}`,
-            summary: billSummaries[bill.number]?.summary || bill.name?.en,
-            status_code: billSummaries[bill.number]?.status_code || 'Introduced'
-        }))
+        .map(bill => {
+            const isPassed = passedBillNumbers.has(bill.number);
+            const staticStatus = billSummaries[bill.number]?.status_code;
+
+            // Prioritize API status for passed bills, otherwise fall back to static data or 'Introduced'
+            let status_code = staticStatus || 'Introduced';
+            if (isPassed) {
+                status_code = 'RoyalAssentGiven';
+            }
+
+            return {
+                ...bill,
+                bill_number: bill.number,
+                title: bill.short_title?.en || bill.name?.en, // Prioritize short_title
+                introduced_date: bill.introduced,
+                openparliament_url: `https://openparliament.ca${bill.url}`,
+                status: `Session ${bill.session}`,
+                summary: billSummaries[bill.number]?.summary || bill.name?.en,
+                status_code: status_code
+            };
+        })
         .sort((a, b) => new Date(b.introduced_date) - new Date(a.introduced_date)); // Sort by date, newest first
 
     const filteredBills = bills.filter(bill => {
